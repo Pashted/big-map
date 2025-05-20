@@ -1,12 +1,19 @@
 {
   "name": "big-map",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "version": "1.1.0",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "files": [
+    "lib"
+  ],
   "scripts": {
+    "build": "tsc",
     "test": "node example.js"
   },
-  "keywords": [],
-  "author": "",
+  "devDependencies": {
+    "@types/node": "^22.15.20",
+    "typescript": "^5.8.3"
+  },
+  "repository": "https://github.com/Pashted/big-map",
   "license": "ISC"
 }
