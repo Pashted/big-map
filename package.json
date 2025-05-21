@@ -1,14 +1,16 @@
 {
   "name": "big-map",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "files": [
-    "lib"
+    "lib",
+    "src/index.ts"
   ],
   "scripts": {
     "build": "tsc",
-    "test": "node example.js"
+    "watch": "tsc --watch",
+    "test": "node lib/example.js"
   },
   "devDependencies": {
     "@types/node": "^22.15.20",
