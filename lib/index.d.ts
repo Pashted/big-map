@@ -1,19 +1,23 @@
-export declare class BigMap<K, V = undefined> {
-    private maps;
-    private readonly aggregate;
-    static aggregate<K, V>(arr: V[], key: string | number): BigMap<K, V>;
-    constructor(arr?: Array<[K, V]>, aggregate?: boolean);
-    constructor(arr: K[], aggregate?: boolean);
-    constructor(arr: V[], key: string | number, aggregate?: boolean);
-    get root(): Map<K, V | V[]>;
+type KeySelectorType = string | number | Array<string | number>;
+export declare class BigMap<K, V = unknown> {
+    [Symbol.toStringTag]: string;
+    private _maps;
+    private readonly _aggregate;
+    static groupBy<K, V extends Object>(key: KeySelectorType, arr: V[]): BigMap<K, V>;
+    static aggregate<K, V extends Object>(key: KeySelectorType, arr: V[]): BigMap<K, V>;
+    constructor(arr?: Array<[K, V]>);
+    constructor(arr: K[]);
+    constructor(arr: V[], key: KeySelectorType, aggregate?: boolean);
+    private get _root();
     get size(): number;
     get(key: K): V | V[] | undefined;
     set(key: K, value: V): this;
-    delete(key: K): this;
-    clear(): this;
     has(key: K): boolean;
+    delete(key: K): boolean;
+    clear(): this;
     entries(): Array<[K, V | V[]]>;
     keys(): K[];
     values(): Array<V | V[]>;
+    forEach(callback: (value: V | V[], key: K, map: Map<K, V | V[]>) => void): void;
 }
 export default BigMap;

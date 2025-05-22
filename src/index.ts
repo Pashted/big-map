@@ -1,88 +1,104 @@
 const SOFT_LIMIT = Math.pow(2, 24) - 1; // ~16.7M
 
-export class BigMap<K, V = undefined> {
-    private maps: Array<Map<K, V | V[]>> = [];
-    private readonly aggregate: boolean;
+type KeySelectorType = string | number | Array<string | number>;
 
-    static aggregate<K, V>(arr: V[], key: string | number) {
+export class BigMap<K, V = unknown> {
+
+    public [Symbol.toStringTag] = 'BigMap';
+    private _maps: Array<Map<K, V | V[]>> = [];
+    private readonly _aggregate: boolean;
+
+    static groupBy<K, V extends Object>(key: KeySelectorType, arr: V[]) {
+        return new BigMap<K, V>(arr, key);
+    }
+
+    static aggregate<K, V extends Object>(key: KeySelectorType, arr: V[]) {
         return new BigMap<K, V>(arr, key, true);
     }
 
-    constructor(arr?: Array<[ K, V ]>, aggregate?: boolean);
-    constructor(arr: K[], aggregate?: boolean);
-    constructor(arr: V[], key: string | number, aggregate?: boolean);
-    constructor(arr: any[] = [], key?: string | number | boolean, aggregate: boolean = false) {
-        this.aggregate = typeof key === 'boolean' ? key : aggregate;
+    constructor(arr?: Array<[ K, V ]>); // common Map constructor
+    constructor(arr: K[]); // Array of primitives
+    constructor(arr: V[], key: KeySelectorType, aggregate?: boolean); // Array of objects
+    constructor(arr: any[] = [], key?: KeySelectorType, aggregate: boolean = false) {
+        this._aggregate = aggregate;
 
-        let tuples: Array<[ K, V | undefined ]>;
+        let tuples: Array<[ K, V ]>;
 
         if (typeof key === 'string' || typeof key === 'number') {
-            // arr is Array of objects, take key and object
-            tuples = (arr as V[]).map((obj) => [ (obj as any)[key] as K, obj ]);
+            // arr is Array of objects, take single key and object
+            tuples = (arr as V[]).map((obj: any) => [ obj[key] as K, obj as V ]);
+        }
+        else if (key instanceof Array) {
+            // arr is Array of objects, take combined key and object
+            tuples = (arr as V[]).map((obj) => [
+                key.map(k => ((obj as any)[k] ?? '') + '').join('_') as K,
+                obj,
+            ]);
         }
         else if (arr[0] instanceof Array) {
             // arr is Array of tuples [K, V]
             tuples = (arr as Array<[ K, V ]>).map(tuple => [ tuple[0], tuple[1] ]);
         }
         else {
-            // arr - Array of primitives, take primitives as keys
-            tuples = (arr as K[]).map(val => [ val, undefined ]);
+            // arr is Array of primitives, take primitives as keys
+            tuples = (arr as K[]).map(val => [ val, 1 as V ]);
         }
 
-        tuples = tuples.filter(([ k ]) => k !== undefined);
-
-        if (!this.aggregate) {
+        if (!this._aggregate) {
             while (tuples.length) {
                 const chunk = tuples
                     .splice(SOFT_LIMIT * -1) // iterate from the end to keep only last copies
                     .filter(([ k ]) => !this.has(k as K)) as Array<[ K, V ]>;
                 if (chunk.length) {
-                    this.maps.unshift(new Map<K, V>(chunk));
+                    this._maps.unshift(new Map<K, V>(chunk));
                 }
             }
-            if (!this.maps.length) {
-                this.maps.push(new Map<K, V>());
+            if (!this._maps.length) {
+                this._maps = [ new Map<K, V>() ];
             }
         }
         else {
-            this.maps.push(new Map<K, V[]>());
+            this._maps = [ new Map<K, V[]>() ];
 
-            do {
+            while (tuples.length) {
                 const chunk = tuples.splice(0, SOFT_LIMIT);
                 // When aggregate = true, concatenate all values of the same key into one array
                 for (const [ k, v ] of chunk) {
                     this.set(k, v as V);
                 }
             }
-            while (tuples.length);
         }
     }
 
-    get root(): Map<K, V | V[]> {
-        return this.maps[0];
+    private get _root(): Map<K, V | V[]> {
+        return this._maps.at(-1)!;
     }
 
     get size(): number {
-        return this.maps.reduce((sum, m) => sum + m.size, 0);
+        return this._maps.reduce((sum, m) => sum + m.size, 0);
     }
 
     get(key: K): V | V[] | undefined {
-        const map = this.maps.find(m => m.has(key));
+        const map = this._maps.find(m => m.has(key));
         return map?.get(key);
     }
 
     set(key: K, value: V): this {
-        if (this.root.size >= SOFT_LIMIT) {
-            this.maps.unshift(this.aggregate ? new Map<K, V[]>() : new Map<K, V>());
+        if (this._root.size >= SOFT_LIMIT) {
+            this._maps.push(this._aggregate ? new Map<K, V[]>() : new Map<K, V>());
             console.info(
                 'BigMap extended to',
-                this.maps.length, 'maps with total',
+                this._maps.length, 'maps with total',
                 this.size, 'elements',
             );
         }
 
-        if (this.aggregate) {
-            const map = (this.maps.find(m => m.has(key)) || this.root) as Map<K, V[]>;
+        if (!this._aggregate) {
+            const map = (this._maps.find(m => m.has(key)) || this._root) as Map<K, V>;
+            map.set(key, value);
+        }
+        else {
+            const map = (this._maps.find(m => m.has(key)) || this._root) as Map<K, V[]>;
             const existing = map.get(key);
 
             if (existing === undefined) {
@@ -92,39 +108,43 @@ export class BigMap<K, V = undefined> {
                 existing.push(value);
             }
         }
-        else {
-            const map = (this.maps.find(m => m.has(key)) || this.root) as Map<K, V>;
-            map.set(key, value);
-        }
-        return this;
-    }
-
-    delete(key: K): this {
-        const map = this.maps.find(m => m.has(key)) || this.root;
-        map.delete(key);
-        return this;
-    }
-
-    clear(): this {
-        this.maps.forEach(m => m.clear());
-        this.maps = [ new Map<K, V | V[]>() ];
         return this;
     }
 
     has(key: K): boolean {
-        return this.maps.some(m => m.has(key));
+        return this._maps.some(m => m.has(key));
+    }
+
+    delete(key: K): boolean {
+        const map = this._maps.find(m => m.has(key)) || this._root;
+        const exists = map.has(key);
+        if (exists)
+            map.delete(key);
+        return exists;
+    }
+
+    clear(): this {
+        this._maps.forEach(m => m.clear());
+        this._maps = [ new Map<K, V | V[]>() ];
+        return this;
     }
 
     entries(): Array<[ K, V | V[] ]> {
-        return this.maps.flatMap(m => Array.from(m.entries()));
+        return this._maps.flatMap(m => Array.from(m.entries()));
     }
 
     keys(): K[] {
-        return this.maps.flatMap(m => Array.from(m.keys()));
+        return this._maps.flatMap(m => Array.from(m.keys()));
     }
 
     values(): Array<V | V[]> {
-        return this.maps.flatMap(m => Array.from(m.values()));
+        return this._maps.flatMap(m => Array.from(m.values()));
+    }
+
+    public forEach(callback: (value: V | V[], key: K, map: Map<K, V | V[]>) => void): void {
+        for (const map of this._maps) {
+            map.forEach(callback);
+        }
     }
 }
 
