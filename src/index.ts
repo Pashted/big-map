@@ -2,24 +2,24 @@ const SOFT_LIMIT = Math.pow(2, 24) - 1; // ~16.7M
 
 type KeySelectorType = string | number | Array<string | number>;
 
-export class BigMap<K, V = unknown> {
+export class BigMap<K, V = unknown, A extends boolean = false> {
 
     public [Symbol.toStringTag] = 'BigMap';
+    private readonly _aggregate: A;
     private _maps: Array<Map<K, V | V[]>> = [];
-    private readonly _aggregate: boolean;
 
     static groupBy<K, V extends Object>(key: KeySelectorType, arr: V[]) {
         return new BigMap<K, V>(arr, key);
     }
 
     static aggregate<K, V extends Object>(key: KeySelectorType, arr: V[]) {
-        return new BigMap<K, V>(arr, key, true);
+        return new BigMap<K, V, true>(arr, key, true);
     }
 
     constructor(arr?: Array<[ K, V ]>); // common Map constructor
     constructor(arr: K[]); // Array of primitives
     constructor(arr: V[], key: KeySelectorType, aggregate?: boolean); // Array of objects
-    constructor(arr: any[] = [], key?: KeySelectorType, aggregate: boolean = false) {
+    constructor(arr: any[] = [], key?: KeySelectorType, aggregate: A = false as A) {
         this._aggregate = aggregate;
 
         let tuples: Array<[ K, V ]>;
@@ -78,14 +78,16 @@ export class BigMap<K, V = unknown> {
         return this._maps.reduce((sum, m) => sum + m.size, 0);
     }
 
-    get(key: K): V | V[] | undefined {
+    get(key: K): (A extends true ? V[] : V) | undefined {
         const map = this._maps.find(m => m.has(key));
-        return map?.get(key);
+        if (!map)
+            return undefined;
+        return map.get(key) as any;
     }
 
     set(key: K, value: V): this {
         if (this._root.size >= SOFT_LIMIT) {
-            this._maps.push(this._aggregate ? new Map<K, V[]>() : new Map<K, V>());
+            this._maps.push(new Map<K, V | V[]>());
             console.info(
                 'BigMap extended to',
                 this._maps.length, 'maps with total',
@@ -102,7 +104,7 @@ export class BigMap<K, V = unknown> {
             const existing = map.get(key);
 
             if (existing === undefined) {
-                map.set(key, [ value ] as V[]);
+                map.set(key, [ value ]);
             }
             else {
                 existing.push(value);
@@ -129,21 +131,25 @@ export class BigMap<K, V = unknown> {
         return this;
     }
 
-    entries(): Array<[ K, V | V[] ]> {
-        return this._maps.flatMap(m => Array.from(m.entries()));
+    entries(): Array<[ K, A extends true ? V[] : V ]> {
+        return this._maps.flatMap(m => Array.from(m.entries())) as any;
     }
 
     keys(): K[] {
         return this._maps.flatMap(m => Array.from(m.keys()));
     }
 
-    values(): Array<V | V[]> {
-        return this._maps.flatMap(m => Array.from(m.values()));
+    values(): Array<A extends true ? V[] : V> {
+        return this._maps.flatMap(m => Array.from(m.values())) as any;
     }
 
-    public forEach(callback: (value: V | V[], key: K, map: Map<K, V | V[]>) => void): void {
+    public forEach(callback: (
+        value: A extends true ? V[] : V,
+        key: K,
+        map: Map<K, A extends true ? V[] : V>,
+    ) => void): void {
         for (const map of this._maps) {
-            map.forEach(callback);
+            map.forEach(callback as any);
         }
     }
 }

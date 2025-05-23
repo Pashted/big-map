@@ -79,7 +79,7 @@ util.inspect.defaultOptions = {
     log('EXAMPLE 4', map);
 }
 
-function log(title: string, map: BigMap<any, any>) {
+function log(title: string, map: BigMap<any, any, boolean>) {
     console.log('\n', '- '.repeat(2) + title, '- '.repeat(15));
     console.log(`map.size =>`, map.size);
     console.log(`map.entries() =>`, map.entries());
